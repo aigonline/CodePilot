@@ -119,7 +119,7 @@ export default function PreviewPage() {
             </html>
           `;
         } else {
-          setError(\`Preview is not supported for \${language.toUpperCase()}.\`);
+          setError(\`Preview is not supported for ${language.toUpperCase()}.\`);
           setHtmlContent('Preview not available for this language.');
           setIsLoading(false);
           return;
@@ -148,7 +148,7 @@ export default function PreviewPage() {
               </Button>
             </Link>
             <h1 className="text-xl md:text-2xl font-semibold text-primary">
-              Code Preview {currentLanguage && `(${currentLanguage.toUpperCase()})`}
+              Code Preview {currentLanguage && \`(${currentLanguage.toUpperCase()})\`}
             </h1>
           </div>
         </div>
@@ -184,4 +184,3 @@ export default function PreviewPage() {
     </div>
   );
 }
-
