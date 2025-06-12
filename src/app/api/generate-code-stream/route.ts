@@ -61,7 +61,17 @@ export async function POST(request: Request) {
 
   } catch (error: any) { // Catches errors from request.json() or initial ai.generateStream setup
     console.error('Error in generate-code-stream handler (pre-stream setup):', error);
-    return NextResponse.json({error: error.message || 'Failed to initiate code stream.'}, {status: 500});
+    
+    let message = 'Failed to initiate code stream due to a server error.';
+    if (error instanceof Error && error.message) {
+      message = error.message;
+    } else if (typeof error === 'string' && error) {
+      message = error;
+    }
+    
+    const finalErrorMessage = String(message || 'Unknown server error during stream initiation.');
+    console.error('Sending error to client:', finalErrorMessage);
+    return NextResponse.json({error: finalErrorMessage }, {status: 500});
   }
 }
 
