@@ -20,7 +20,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { generateCodeAction, type GenerateCodeActionState } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from "next/navigation";
@@ -58,7 +57,7 @@ const MAX_HISTORY_ITEMS = 20;
 
 export default function CodePilotDashboardPage() {
   const [prompt, setPrompt] = React.useState<string>("");
-  const [language, setLanguage] = React.useState<string>(SUPPORTED_LANGUAGES[2].value); 
+  const [language, setLanguage] = React.useState<string>(SUPPORTED_LANGUAGES[2].value);
   const [generatedCode, setGeneratedCode] = React.useState<string>("");
   const [history, setHistory] = React.useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
@@ -66,12 +65,7 @@ export default function CodePilotDashboardPage() {
 
   const { toast } = useToast();
   const router = useRouter();
-
-  const initialState: GenerateCodeActionState = {};
-  const [formState, formAction] = React.useActionState(generateCodeAction, initialState);
   
-  const formRef = React.useRef<HTMLFormElement>(null);
-
   React.useEffect(() => {
     const storedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
     if (storedHistory) {
@@ -83,38 +77,79 @@ export default function CodePilotDashboardPage() {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
   }, [history]);
 
-  React.useEffect(() => {
-    setIsLoading(false);
-    if (formState?.code) {
-      setGeneratedCode(formState.code);
-      const newHistoryItem: HistoryItem = {
-        id: Date.now().toString(),
-        prompt,
-        language,
-        code: formState.code,
-        timestamp: Date.now(),
-      };
-      setHistory(prevHistory => [newHistoryItem, ...prevHistory].slice(0, MAX_HISTORY_ITEMS));
-      toast({ title: "Success", description: "Code generated successfully!" });
-    } else if (formState?.error) {
-      toast({ variant: "destructive", title: "Error", description: formState.error });
-      setGeneratedCode(""); 
-    } else if (formState?.inputErrors) {
-       const errors = Object.values(formState.inputErrors).join(" ");
-       toast({ variant: "destructive", title: "Validation Error", description: errors });
-       setGeneratedCode("");
-    }
-  }, [formState, prompt, language, toast, setGeneratedCode, setHistory]);
-
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!prompt.trim()) {
+      toast({ variant: "destructive", title: "Validation Error", description: "Prompt cannot be empty." });
+      return;
+    }
+    if (!language) {
+      toast({ variant: "destructive", title: "Validation Error", description: "Language must be selected." });
+      return;
+    }
+
     setIsLoading(true);
     setGeneratedCode(""); 
-    const formData = new FormData(event.currentTarget);
-    React.startTransition(() => {
-      formAction(formData);
-    });
+
+    try {
+      const response = await fetch('/api/generate-code-stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt, language }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to generate code. Server returned an error." }));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error("Response body is null.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedCode = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        accumulatedCode += chunk;
+        setGeneratedCode(prev => prev + chunk);
+      }
+      
+      // Final chunk might need decoding without stream: true
+      // const finalChunk = decoder.decode(undefined, { stream: false });
+      // if (finalChunk) {
+      //  accumulatedCode += finalChunk;
+      //  setGeneratedCode(prev => prev + finalChunk);
+      // }
+
+
+      if (accumulatedCode.trim() === "") {
+         toast({ variant: "destructive", title: "Empty Response", description: "The AI returned an empty response. Try a different prompt." });
+      } else {
+        toast({ title: "Success", description: "Code generated successfully!" });
+        const newHistoryItem: HistoryItem = {
+          id: Date.now().toString(),
+          prompt,
+          language,
+          code: accumulatedCode,
+          timestamp: Date.now(),
+        };
+        setHistory(prevHistory => [newHistoryItem, ...prevHistory].slice(0, MAX_HISTORY_ITEMS));
+      }
+
+    } catch (e: any) {
+      console.error("Error generating code:", e);
+      toast({ variant: "destructive", title: "Error", description: e.message || "An unexpected error occurred." });
+      setGeneratedCode(""); // Clear on error
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const handleCopyToClipboard = () => {
@@ -186,8 +221,6 @@ export default function CodePilotDashboardPage() {
 
     try {
       localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify({ code: generatedCode, language }));
-      const previewUrl = router.push('/preview'); // router.push is async in some cases, not typically for simple paths
-      // Forcing a new tab for preview
       const newWindow = window.open('/preview', '_blank', 'noopener,noreferrer');
       if (newWindow) newWindow.opener = null;
 
@@ -212,13 +245,13 @@ export default function CodePilotDashboardPage() {
             <CardDescription>Enter your prompt and select a language.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label htmlFor="prompt" className="block text-sm font-medium text-foreground mb-2">
+                <Label htmlFor="prompt-input" className="block text-sm font-medium text-foreground mb-2">
                   Prompt
-                </label>
+                </Label>
                 <Textarea
-                  id="prompt"
+                  id="prompt-input"
                   name="prompt"
                   placeholder="e.g., a React component for a login form with Tailwind CSS"
                   rows={6}
@@ -229,11 +262,11 @@ export default function CodePilotDashboardPage() {
                 />
               </div>
               <div>
-                <label htmlFor="language" className="block text-sm font-medium text-foreground mb-2">
+                <Label htmlFor="language-select" className="block text-sm font-medium text-foreground mb-2">
                   Language
-                </label>
+                </Label>
                 <Select name="language" value={language} onValueChange={setLanguage} required>
-                  <SelectTrigger id="language" className="focus:ring-primary focus:border-primary rounded-xl">
+                  <SelectTrigger id="language-select" className="focus:ring-primary focus:border-primary rounded-xl">
                     <SelectValue placeholder="Select language" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -320,14 +353,15 @@ export default function CodePilotDashboardPage() {
           </CardHeader>
           <CardContent className="flex-grow flex flex-col min-h-[calc(100vh-12rem-120px)] md:min-h-0">
             <ScrollArea className="flex-grow rounded-xl border border-input bg-muted/20 p-1 relative min-h-[300px] md:min-h-[500px] lg:min-h-[600px]">
-              {isLoading ? (
+              {isLoading && !generatedCode ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground animate-pulse">
                   <SendHorizonal className="h-12 w-12 mb-4 text-primary opacity-50 animate-bounce" />
                   Generating code...
                 </div>
-              ) : generatedCode ? (
+              ) : generatedCode || (isLoading && generatedCode) ? (
                 <pre className="p-4 text-sm font-code whitespace-pre-wrap break-all animate-fade-in">
                   <code className={`language-${language}`}>{generatedCode}</code>
+                  {isLoading && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1"></span>}
                 </pre>
               ) : (
                  <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">

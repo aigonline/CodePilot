@@ -1,11 +1,13 @@
-// use server'
+
 'use server';
 /**
  * @fileOverview Generates code snippets based on user prompts in a specified language.
+ * Includes both non-streaming and streaming capabilities.
  *
- * - generateCode - A function that takes a prompt and language and returns generated code.
+ * - generateCode - A function that takes a prompt and language and returns generated code (non-streaming).
  * - GenerateCodeInput - The input type for the generateCode function.
  * - GenerateCodeOutput - The return type for the generateCode function.
+ * - rawCodeStreamingPrompt - A Genkit prompt optimized for streaming raw code.
  */
 
 import {ai} from '@/ai/genkit';
@@ -22,11 +24,8 @@ const GenerateCodeOutputSchema = z.object({
 });
 export type GenerateCodeOutput = z.infer<typeof GenerateCodeOutputSchema>;
 
-export async function generateCode(input: GenerateCodeInput): Promise<GenerateCodeOutput> {
-  return generateCodeFlow(input);
-}
-
-const prompt = ai.definePrompt({
+// Non-streaming prompt
+const generateCodePrompt = ai.definePrompt({
   name: 'generateCodePrompt',
   input: {schema: GenerateCodeInputSchema},
   output: {schema: GenerateCodeOutputSchema},
@@ -38,6 +37,7 @@ const prompt = ai.definePrompt({
   Prompt: {{{prompt}}}`,
 });
 
+// Non-streaming flow
 const generateCodeFlow = ai.defineFlow(
   {
     name: 'generateCodeFlow',
@@ -45,7 +45,27 @@ const generateCodeFlow = ai.defineFlow(
     outputSchema: GenerateCodeOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
+    const {output} = await generateCodePrompt(input);
     return output!;
   }
 );
+
+// Exported non-streaming function (can be used by server actions if needed)
+export async function generateCode(input: GenerateCodeInput): Promise<GenerateCodeOutput> {
+  return generateCodeFlow(input);
+}
+
+// Streaming-optimized prompt
+export const rawCodeStreamingPrompt = ai.definePrompt({
+  name: 'rawCodeStreamingPrompt',
+  input: {schema: GenerateCodeInputSchema},
+  // No output schema here as we stream raw text from the model for code
+  prompt: `You are an expert software developer who specializes in generating code snippets from user prompts.
+
+  Generate code based on the following prompt in the specified language.
+  Return ONLY the raw code. Do not include any markdown formatting like \`\`\`language ... \`\`\` or explanations.
+  Just the code itself.
+
+  Language: {{{language}}}
+  Prompt: {{{prompt}}}`,
+});
