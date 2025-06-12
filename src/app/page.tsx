@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { Cpu, History, SendHorizonal, Copy, Download, Trash2, ChevronRight } from "lucide-react";
+import { Cpu, History, SendHorizonal, Copy, Download, Trash2, ChevronRight, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,6 +23,7 @@ import {
 import { generateCodeAction, type GenerateCodeActionState } from "./actions";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from 'date-fns';
+import { useRouter } from "next/navigation";
 
 interface HistoryItem {
   id: string;
@@ -51,6 +52,8 @@ const SUPPORTED_LANGUAGES = [
 ];
 
 const HISTORY_STORAGE_KEY = "codepilot_history";
+const PREVIEW_STORAGE_KEY = 'codePilotPreview';
+const PREVIEWABLE_LANGUAGES = ["html", "css", "javascript"];
 const MAX_HISTORY_ITEMS = 20;
 
 export default function CodePilotPage() {
@@ -61,8 +64,8 @@ export default function CodePilotPage() {
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [activeAccordionItem, setActiveAccordionItem] = React.useState<string | undefined>(undefined);
 
-
   const { toast } = useToast();
+  const router = useRouter();
 
   const initialState: GenerateCodeActionState = {};
   const [formState, formAction] = React.useActionState(generateCodeAction, initialState);
@@ -95,7 +98,7 @@ export default function CodePilotPage() {
       toast({ title: "Success", description: "Code generated successfully!" });
     } else if (formState?.error) {
       toast({ variant: "destructive", title: "Error", description: formState.error });
-      setGeneratedCode("");
+      setGeneratedCode(""); 
     } else if (formState?.inputErrors) {
        const errors = Object.values(formState.inputErrors).join(" ");
        toast({ variant: "destructive", title: "Validation Error", description: errors });
@@ -106,7 +109,7 @@ export default function CodePilotPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
-    setGeneratedCode(""); // Clear previous code
+    setGeneratedCode(""); 
     const formData = new FormData(event.currentTarget);
     React.startTransition(() => {
       formAction(formData);
@@ -130,7 +133,6 @@ export default function CodePilotPage() {
             case "javascript": return "js";
             case "typescript": return "ts";
             case "python": return "py";
-            // Add other specific extensions if needed
             default: return foundLang.value;
         }
     }
@@ -158,7 +160,7 @@ export default function CodePilotPage() {
     setPrompt(item.prompt);
     setLanguage(item.language);
     setGeneratedCode(item.code);
-    setActiveAccordionItem(undefined); // Close accordion
+    setActiveAccordionItem(undefined); 
     toast({ title: "Loaded from history", description: "Prompt and code loaded." });
   };
 
@@ -166,6 +168,34 @@ export default function CodePilotPage() {
     setHistory([]);
     toast({ title: "History Cleared" });
   };
+
+  const isPreviewable = React.useMemo(() => {
+    return generatedCode && PREVIEWABLE_LANGUAGES.includes(language);
+  }, [generatedCode, language]);
+
+  const handlePreview = () => {
+    if (!isPreviewable) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Preview",
+        description: `Preview is only available for HTML, CSS, and JavaScript. Current language: ${language}.`,
+      });
+      return;
+    }
+
+    try {
+      localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify({ code: generatedCode, language }));
+      router.push('/preview');
+    } catch (error) {
+      console.error("Failed to save to localStorage or navigate:", error);
+      toast({
+        variant: "destructive",
+        title: "Preview Error",
+        description: "Could not prepare data for preview.",
+      });
+    }
+  };
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -178,7 +208,7 @@ export default function CodePilotPage() {
 
       <main className="flex-grow p-4 md:p-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Left Column: Inputs and History */}
+          
           <div className="md:col-span-1 flex flex-col gap-8">
             <Card className="shadow-lg">
               <CardHeader>
@@ -275,7 +305,7 @@ export default function CodePilotPage() {
             </Card>
           </div>
 
-          {/* Right Column: Code Display */}
+          
           <div className="md:col-span-2">
             <Card className="shadow-lg h-full flex flex-col">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -286,6 +316,9 @@ export default function CodePilotPage() {
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleDownloadCode} disabled={!generatedCode || isLoading} aria-label="Download code">
                     <Download className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handlePreview} disabled={!isPreviewable || isLoading} aria-label="Preview code">
+                    <Eye className="h-4 w-4" />
                   </Button>
                 </div>
               </CardHeader>
