@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -94,18 +95,22 @@ export default function CodePilotPage() {
       toast({ title: "Success", description: "Code generated successfully!" });
     } else if (formState?.error) {
       toast({ variant: "destructive", title: "Error", description: formState.error });
+      setGeneratedCode("");
     } else if (formState?.inputErrors) {
        const errors = Object.values(formState.inputErrors).join(" ");
        toast({ variant: "destructive", title: "Validation Error", description: errors });
+       setGeneratedCode("");
     }
-  }, [formState, prompt, language, toast]); // Added prompt, language, toast to dependency array
+  }, [formState, prompt, language, toast, setGeneratedCode, setHistory]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
     setGeneratedCode(""); // Clear previous code
     const formData = new FormData(event.currentTarget);
-    formAction(formData);
+    React.startTransition(() => {
+      formAction(formData);
+    });
   };
   
   const handleCopyToClipboard = () => {
@@ -314,3 +319,4 @@ export default function CodePilotPage() {
     </div>
   );
 }
+
