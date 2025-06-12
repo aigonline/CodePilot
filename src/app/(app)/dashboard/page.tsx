@@ -20,7 +20,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Label } from "@/components/ui/label"; // Added import
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from "next/navigation";
@@ -102,8 +102,26 @@ export default function CodePilotDashboardPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to generate code. Server returned an error." }));
-        throw new Error(errorData.error || `Server error: ${response.status}`);
+        let serverErrorMsg = `Server error: ${response.status}`;
+        try {
+          // Try to parse the error as JSON first
+          const errorData = await response.json();
+          if (errorData && errorData.error) {
+            serverErrorMsg = errorData.error;
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, try to read as text (e.g., for HTML error pages)
+          try {
+            const textError = await response.text();
+            if (textError) {
+               // Truncate to avoid overly long messages from HTML pages
+              serverErrorMsg = textError.substring(0, 500) + (textError.length > 500 ? "..." : "");
+            }
+          } catch (textParseError) {
+            // If text parsing also fails, stick with the status code message
+          }
+        }
+        throw new Error(serverErrorMsg);
       }
 
       if (!response.body) {
@@ -122,16 +140,8 @@ export default function CodePilotDashboardPage() {
         setGeneratedCode(prev => prev + chunk);
       }
       
-      // Final chunk might need decoding without stream: true
-      // const finalChunk = decoder.decode(undefined, { stream: false });
-      // if (finalChunk) {
-      //  accumulatedCode += finalChunk;
-      //  setGeneratedCode(prev => prev + finalChunk);
-      // }
-
-
       if (accumulatedCode.trim() === "") {
-         toast({ variant: "destructive", title: "Empty Response", description: "The AI returned an empty response. Try a different prompt." });
+         toast({ variant: "warning", title: "Empty Response", description: "The AI returned an empty response. Try a different prompt." });
       } else {
         toast({ title: "Success", description: "Code generated successfully!" });
         const newHistoryItem: HistoryItem = {
@@ -147,7 +157,7 @@ export default function CodePilotDashboardPage() {
     } catch (e: any) {
       console.error("Error generating code:", e);
       toast({ variant: "destructive", title: "Error", description: e.message || "An unexpected error occurred." });
-      setGeneratedCode(""); // Clear on error
+      setGeneratedCode(""); 
     } finally {
       setIsLoading(false);
     }
@@ -377,3 +387,5 @@ export default function CodePilotDashboardPage() {
     </div>
   );
 }
+
+    
