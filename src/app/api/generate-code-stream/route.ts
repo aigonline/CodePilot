@@ -8,7 +8,10 @@ export const runtime = 'edge'; // Prefer edge runtime for streaming
 
 export async function POST(request: Request) {
   try {
-    const {prompt, language} = (await request.json()) as GenerateCodeInput;
+    let {prompt, language} = (await request.json()) as GenerateCodeInput;
+
+    // Trim prompt and check if it's empty after trimming
+    prompt = prompt ? prompt.trim() : "";
 
     if (!prompt || !language) {
       return NextResponse.json({error: 'Prompt and language are required.'}, {status: 400});
@@ -61,3 +64,4 @@ export async function POST(request: Request) {
     return NextResponse.json({error: error.message || 'Failed to initiate code stream.'}, {status: 500});
   }
 }
+
