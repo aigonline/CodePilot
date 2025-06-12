@@ -16,7 +16,8 @@ export async function POST(request: Request) {
 
     const genkitInput: GenerateCodeInput = {prompt, language};
 
-    const {stream} = ai.generateStream({
+    // Destructure both stream and response from ai.generateStream
+    const {stream: genkitStream, response: genkitResponsePromise} = ai.generateStream({
       prompt: rawCodeStreamingPrompt,
       input: genkitInput,
       config: {
@@ -27,32 +28,36 @@ export async function POST(request: Request) {
       }
     });
 
-    const readableStream = new ReadableStream({
+    const readableWebStream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
         try {
-          for await (const chunk of stream) {
+          for await (const chunk of genkitStream) {
             if (chunk.text) {
               controller.enqueue(encoder.encode(chunk.text));
             }
           }
-        } catch (error) {
-          console.error('Error during stream processing:', error);
-          controller.error(error);
-        } finally {
-          controller.close();
+          // Await the Genkit response promise after the stream is consumed
+          // This ensures any errors from the overall Genkit operation are caught.
+          await genkitResponsePromise;
+          controller.close(); // Close the stream successfully
+        } catch (err) {
+          console.error('Error during Genkit stream processing or finalization:', err);
+          // Propagate the error to the stream consumer (client)
+          controller.error(err);
         }
       },
     });
 
-    return new Response(readableStream, {
+    return new Response(readableWebStream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-Content-Type-Options': 'nosniff',
       },
     });
-  } catch (error: any) {
-    console.error('Error in generate-code-stream handler:', error);
-    return NextResponse.json({error: error.message || 'Failed to generate code stream.'}, {status: 500});
+
+  } catch (error: any) { // Catches errors from request.json() or initial ai.generateStream setup
+    console.error('Error in generate-code-stream handler (pre-stream setup):', error);
+    return NextResponse.json({error: error.message || 'Failed to initiate code stream.'}, {status: 500});
   }
 }
