@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useFormState } from "react-dom";
 import { Cpu, History, SendHorizonal, Copy, Download, Trash2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,7 +64,7 @@ export default function CodePilotPage() {
   const { toast } = useToast();
 
   const initialState: GenerateCodeActionState = {};
-  const [formState, formAction] = useFormState(generateCodeAction, initialState);
+  const [formState, formAction] = React.useActionState(generateCodeAction, initialState);
   
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -99,7 +98,7 @@ export default function CodePilotPage() {
        const errors = Object.values(formState.inputErrors).join(" ");
        toast({ variant: "destructive", title: "Validation Error", description: errors });
     }
-  }, [formState]);
+  }, [formState, prompt, language, toast]); // Added prompt, language, toast to dependency array
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
